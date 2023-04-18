@@ -73,7 +73,7 @@ if smooth:
     col1, col2 = st.columns(2)
 
     with col1:
-        window_size = st.slider("Window size", 1, 13, 5, step = 1)
+        window_size = st.slider("Window size", 1, 13, 9, step = 1)
     with col2:
         poly_order = st.slider("Polynomial order", 1, 5, 3, step = 1)
 
