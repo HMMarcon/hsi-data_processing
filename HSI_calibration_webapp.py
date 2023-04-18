@@ -61,7 +61,7 @@ filter_range = st.slider("Select filter range", int(min(calibration.index)), int
 calibration = calibration.loc[filter_range[0]:filter_range[1]]
 
 # User decide Sav-Gol filter parameters
-st.markdown("## Savitzky-Golay filter parameters")
+st.markdown("## 3. Savitzky-Golay Filter")
 st.markdown("Explanation of what each parameter does")
 
 
@@ -100,7 +100,7 @@ st.plotly_chart(fig)
 
 # User decide PLS parameters
 # Select number of components
-st.markdown("## Partial Least Squares Regression parameters")
+st.markdown("## 4. Partial Least Squares Regression parameters")
 st.markdown("Explanation of what each parameter does")
 
 data_model = st.radio("Select with what do you want to make the analysis", ["Intensity", "First derivative", "Second derivative"])
@@ -143,7 +143,7 @@ pls.fit(data.transpose(),calibration_concentrations)
 
 
 # Generate predictions with sample data
-st.markdown("## Predictions")
+st.markdown("## 5. Predictions")
 
 if sample_file is None:
     st.write("Please upload a sample file")
