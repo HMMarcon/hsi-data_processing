@@ -164,8 +164,8 @@ if sample_file is not None:
         sample_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_d1, window_length=window_size,
                                                                  polyorder=poly_order,axis=0), edge_order=2)[0], index = sample.index, columns = sample.columns)
     else:
-        sample_d1 = pd.DataFrame(np.gradient(sample, edge_order=2)[0], index = calibration.index, columns = calibration.columns)
-        sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = calibration.index, columns = calibration.columns)
+        sample_d1 = pd.DataFrame(np.gradient(sample, edge_order=2)[0], index = sample.index, columns = sample.columns)
+        sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = sample.index, columns = sample.columns)
 
     if data_model == "Intensity":
         sample = sample
