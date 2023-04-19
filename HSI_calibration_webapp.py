@@ -78,10 +78,10 @@ if smooth:
         poly_order = st.slider("Polynomial order", 1, 5, 3, step = 1)
 
     calibration_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(calibration, window_length=window_size,
-                                                             polyorder=poly_order,axis=0), edge_order=2)[0], index = calibration.index, columns = calibration.columns)
+                                                             polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = calibration.index, columns = calibration.columns)
 
     calibration_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(calibration_d1, window_length=window_size,
-                                                             polyorder=poly_order,axis=0), edge_order=2)[0], index = calibration.index, columns = calibration.columns)
+                                                             polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = calibration.index, columns = calibration.columns)
 
 else:
     calibration_d1 = pd.DataFrame(np.gradient(calibration, edge_order=2)[0], index = calibration.index, columns = calibration.columns)
@@ -114,7 +114,7 @@ elif data_model == "Second derivative":
 
 pca = PCA(n_components=len(data.columns))
 pca.fit(data.transpose())
-pca_results = pd.DataFrame(pca.explained_variance_ratio_, columns = ["Variance explained"], index = range(len(data.columns)))
+pca_results = pd.DataFrame(pca.explained_variance_ratio_, columns = ["Variance explained"], index = range(1, len(data.columns)+1))
 
 
 fig = px.line(pca_results, title = "PCA explained variance ratio")
@@ -145,6 +145,7 @@ pls.fit(data.transpose(),calibration_concentrations)
 # Generate predictions with sample data
 st.markdown("## 5. Predictions")
 
+
 if sample_file is None:
     st.write("Please upload a sample file")
 
@@ -156,13 +157,14 @@ if sample_file is not None:
 
     sample = sample.loc[filter_range[0]:filter_range[1]]
 
+
     if smooth:
 
         sample_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(sample, window_length=window_size,
-                                                                 polyorder=poly_order,axis=0), edge_order=2)[0], index = sample.index, columns = sample.columns)
+                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample.index, columns = sample.columns)
 
         sample_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_d1, window_length=window_size,
-                                                                 polyorder=poly_order,axis=0), edge_order=2)[0], index = sample.index, columns = sample.columns)
+                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample.index, columns = sample.columns)
     else:
         sample_d1 = pd.DataFrame(np.gradient(sample, edge_order=2)[0], index = sample.index, columns = sample.columns)
         sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = sample.index, columns = sample.columns)
