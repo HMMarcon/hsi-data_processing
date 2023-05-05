@@ -16,34 +16,46 @@ st.markdown("## Introduction")
 st.markdown("This app is designed as a walkthrough to calibrate hyperspectral image data. Here is a general schema of the data processing steps:")
 # st.image("https://i.imgur.com/1Z0ZQ2M.png", width = 500) - add image later
 st.markdown("## 1. Load data")
-st.markdown("Upload calibration data and sample data. Both should be a CSV-file with the first column containing the "
+st.markdown("Upload calibration data and sample data. "
+            "For the previous version: Both should be a CSV-file with the first column containing the "
             "wavelengths and the remaining columns containing the samples (either calibration of unknown samples). "
             "It is important to remember that the CSV-file should have a header with the names of the samples. ")
 
+compounds = st.number_input("Enter number of compounds for calibration:", step = 1)
+compound_names = []
+for compound in range(compounds):
+    compound_names.append(st.text_input(f"Enter compound {compound} name:"))
+
 # Load calibration data (df_calib) and sample data (df_sample)
 # Tell the user how data should be formatted (header = wavelength followed by concentrations)
-calibration_file = st.file_uploader("Upload calibration data", type = "csv")
-sample_file = st.file_uploader("Upload sample data", type = "csv") #Header = wavelength followed by names
+calibration_files = st.file_uploader("Upload calibration data", type = "csv", accept_multiple_files = True)
+calibration = pd.DataFrame()
 
-calibration = pd.read_csv(calibration_file)
-index = calibration.columns[0]
-calibration = calibration.set_index(index)
-calibration = calibration.dropna()
+for calibration_file in calibration_files:
+    calibration_sample = pd.read_csv(calibration_file)
+    calibration_sample = calibration_sample.set_index(calibration_sample.columns[0])
+    calibration_sample = calibration_sample.dropna()
+    calibration = pd.concat([calibration, calibration_sample], axis = 1)
+
+#st.write(full_calibration.head())
+
+calibration_concentrations = pd.DataFrame(columns = ["File name"] + compound_names, index = range(len(calibration.columns)))
+
+
+calibration_concentrations = st.experimental_data_editor(calibration_concentrations)
+
+
+calibration.columns = calibration_concentrations["File name"]
 
 
 
-calibration_concentrations = []
-col1, col2 = st.columns(2)
+calibration_concentrations = calibration_concentrations.set_index("File name")
 
-for i in range(len(calibration.columns)):
-    if i < len(calibration.columns)/2:
-        with col1:
-            value = st.number_input("Enter concentration of " + calibration.columns[i], 0.0, None)
-    else:
-        with col2:
-            value = st.number_input("Enter concentration of " + calibration.columns[i], 0.0, None)
+st.write(calibration_concentrations)
 
-    calibration_concentrations.append(value)
+st.write(calibration.head())
+
+
 
 
 
@@ -78,10 +90,10 @@ if smooth:
         poly_order = st.slider("Polynomial order", 1, 5, 3, step = 1)
 
     calibration_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(calibration, window_length=window_size,
-                                                             polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = calibration.index, columns = calibration.columns)
+                                                             polyorder=poly_order,axis=0), edge_order=2)[0], index = calibration.index, columns = calibration.columns)
 
     calibration_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(calibration_d1, window_length=window_size,
-                                                             polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = calibration.index, columns = calibration.columns)
+                                                             polyorder=poly_order,axis=0), edge_order=2)[0], index = calibration.index, columns = calibration.columns)
 
 else:
     calibration_d1 = pd.DataFrame(np.gradient(calibration, edge_order=2)[0], index = calibration.index, columns = calibration.columns)
@@ -125,8 +137,11 @@ components = st.radio("Select number of components", range(1, len(data.columns))
 
 # Plot PLS diagnostics: scores
 
+st.write(calibration_concentrations)
+
+
 pls = PLSRegression(n_components=components)
-pls.fit(data.transpose(),calibration_concentrations)
+pls.fit(data.transpose().reset_index(drop=True),calibration_concentrations.reset_index(drop=True))
 
 # Add Predicted vs Observed plot
 #
@@ -145,19 +160,19 @@ pls.fit(data.transpose(),calibration_concentrations)
 # Generate predictions with sample data
 st.markdown("## 5. Predictions")
 
+sample_files = st.file_uploader("Upload sample data", type = "csv", accept_multiple_files = True) #Header = wavelength followed by names
+for sample_file in sample_files:
+    if sample_file is None:
+        st.write("Please upload a sample file")
 
-if sample_file is None:
-    st.write("Please upload a sample file")
+    if sample_file is not None:
+        sample = pd.read_csv(sample_file)
+        index = sample.columns[0]
+        sample = sample.set_index(index)
+        sample = sample.dropna()
 
-if sample_file is not None:
-    sample = pd.read_csv(sample_file)
-    index = sample.columns[0]
-    sample = sample.set_index(index)
-    sample = sample.dropna()
-
-    sample = sample.loc[filter_range[0]:filter_range[1]]
-
-
+        sample = sample.loc[filter_range[0]:filter_range[1]]
+    
     if smooth:
 
         sample_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(sample, window_length=window_size,
