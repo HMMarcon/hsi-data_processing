@@ -51,11 +51,6 @@ calibration.columns = calibration_concentrations["File name"]
 
 calibration_concentrations = calibration_concentrations.set_index("File name")
 
-st.write(calibration_concentrations)
-
-st.write(calibration.head())
-
-
 
 
 
