@@ -51,6 +51,11 @@ calibration.columns = calibration_concentrations["File name"]
 
 calibration_concentrations = calibration_concentrations.set_index("File name")
 
+st.write(calibration_concentrations)
+
+st.write(calibration.head())
+
+
 
 
 
@@ -132,7 +137,7 @@ components = st.radio("Select number of components", range(1, len(data.columns))
 
 # Plot PLS diagnostics: scores
 
-st.write(calibration_concentrations)
+st.write(type(data.transpose().reset_index(drop=True)))
 
 
 pls = PLSRegression(n_components=components)
@@ -156,36 +161,42 @@ pls.fit(data.transpose().reset_index(drop=True),calibration_concentrations.reset
 st.markdown("## 5. Predictions")
 
 sample_files = st.file_uploader("Upload sample data", type = "csv", accept_multiple_files = True) #Header = wavelength followed by names
+
+if sample_files is None:
+    st.write("Please upload a sample file")
+
+sample_data = pd.DataFrame()
+
 for sample_file in sample_files:
-    if sample_file is None:
-        st.write("Please upload a sample file")
 
-    if sample_file is not None:
-        sample = pd.read_csv(sample_file)
-        index = sample.columns[0]
-        sample = sample.set_index(index)
-        sample = sample.dropna()
+    sample = pd.read_csv(sample_file)
+    index = sample.columns[0]
+    sample = sample.set_index(index)
+    sample = sample.dropna()
 
-        sample = sample.loc[filter_range[0]:filter_range[1]]
-    
-    if smooth:
+    sample = sample.loc[filter_range[0]:filter_range[1]]
+    sample_data = pd.concat([sample_data, sample], axis = 1)
 
-        sample_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(sample, window_length=window_size,
-                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample.index, columns = sample.columns)
+if smooth:
 
-        sample_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_d1, window_length=window_size,
-                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample.index, columns = sample.columns)
-    else:
-        sample_d1 = pd.DataFrame(np.gradient(sample, edge_order=2)[0], index = sample.index, columns = sample.columns)
-        sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = sample.index, columns = sample.columns)
+    sample_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_data, window_length=window_size,
+                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample_data.index, columns = sample_data.columns)
 
-    if data_model == "Intensity":
-        sample = sample
-    elif data_model == "First derivative":
-        sample = sample_d1
-    elif data_model == "Second derivative":
-        sample = sample_d2
+    sample_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_d1, window_length=window_size,
+                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample_data.index, columns = sample_data.columns)
+else:
+    sample_d1 = pd.DataFrame(np.gradient(sample_data, edge_order=2)[0], index = sample_data.index, columns = sample_data.columns)
+    sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = sample_data.index, columns = sample_data.columns)
 
-    predictions = pls.predict(sample.transpose())
+if data_model == "Intensity":
+    sample_data = sample_data
+elif data_model == "First derivative":
+    sample_data = sample_d1
+elif data_model == "Second derivative":
+    sample_data = sample_d2
 
-    st.write(predictions)
+st.write(pd.DataFrame(sample_data.iloc[:,0]).transpose())
+
+predictions = pls.predict(pd.DataFrame(sample_data.iloc[:,:]).transpose())
+
+st.write(predictions)
