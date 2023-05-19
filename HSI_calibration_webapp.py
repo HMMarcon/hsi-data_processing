@@ -8,6 +8,8 @@ import plotly.graph_objects as go
 from sklearn.cross_decomposition import PLSRegression
 import scipy.signal as signal
 from sklearn.decomposition import PCA
+from sklearn.model_selection import LeaveOneOut
+from sklearn.metrics import r2_score as R2
 
 # Give page description and short tutorial
 st.markdown("# Hyperspectral calibration setup")
@@ -37,16 +39,8 @@ for calibration_file in calibration_files:
     calibration_sample = pd.read_csv(calibration_file, header = None, names = ["Wavelength", calibration_file.name], index_col = "Wavelength")
 
     calibration_sample = calibration_sample.dropna()
-    #calibration_sample.columns = ["Wavelength", calibration_file.name]
     calibration_names.append(calibration_file.name)
     calibration = pd.concat([calibration, calibration_sample[calibration_file.name]], axis = 1)
-
-
-#calibration = calibration.set_index(pd.Index(indexes))
-
-
-#calibration_concentrations = pd.concat( [pd.DataFrame(calibration_names, columns = ["File name"]),
-#                                         pd.DataFrame(columns = compound_names, index = range(len(calibration.columns)))], ignore_index = True)
 
 calibration_concentrations = pd.DataFrame(columns = compound_names, index = range(len(calibration.columns)))
 column_names = calibration_concentrations.columns.tolist()
@@ -54,9 +48,6 @@ column_names.insert(0, "File name")
 calibration_concentrations = calibration_concentrations.reindex(columns = column_names)
 calibration_concentrations["File name"] = calibration_names
 
-
-
-#calibration_concentrations.Index.astype(np.int32)
 
 
 calibration_concentrations = st.experimental_data_editor(calibration_concentrations)
@@ -149,8 +140,34 @@ components = st.radio("Select number of components", range(1, len(data.columns))
 
 
 # Plot PLS diagnostics: scores
+full_data = data
+
+#Leave one out cross validation
+
+loo = LeaveOneOut()
+loo.get_n_splits(full_data.T)
+
+results = pd.DataFrame(columns = compound_names)
+true_values = pd.DataFrame(columns = compound_names)
+
+for i, (train_index, test_index) in enumerate (loo.split(full_data.T)):
+    pls = PLSRegression(n_components=components)
+    pls.fit(full_data.T.iloc[train_index].reset_index(drop=True),calibration_concentrations.iloc[train_index].reset_index(drop=True))
+    result = pls.predict(full_data.T.iloc[test_index].reset_index(drop=True))
+    true_value = calibration_concentrations.iloc[test_index].reset_index(drop=True)
+    true_values = pd.concat([true_values, true_value], axis = 0)
+    results = pd.concat([results, pd.DataFrame(result, columns = compound_names)])
+
+r2 = R2(true_values, results)
+st.markdown(f"Overall R^2 value: {r2}")
+for i in range(len(compound_names)):
+    st.markdown(f"R^2 value for {compound_names[i]}: {R2(true_values.iloc[:,i], results.iloc[:,i])}")
+    #st.image(plt.plot(list(true_values.iloc[:,i]), list(results.iloc[:,i])))
+#st.write(true_values, results)
+#plt.plot(true_values, results, 'o')
 
 
+#Regression with all data
 
 pls = PLSRegression(n_components=components)
 pls.fit(data.transpose().reset_index(drop=True),calibration_concentrations.reset_index(drop=True))
@@ -174,40 +191,42 @@ st.markdown("## 5. Predictions")
 
 sample_files = st.file_uploader("Upload sample data", type = "csv", accept_multiple_files = True) #Header = wavelength followed by names
 
-if sample_files is None:
+if len(sample_files) is 0:
     st.write("Please upload a sample file")
 
-sample_data = pd.DataFrame()
-
-for sample_file in sample_files:
-
-    sample = pd.read_csv(sample_file, header = None, names = ["Wavelength", sample_file.name], index_col = "Wavelength")
-    sample = sample.loc[filter_range[0]:filter_range[1]]
-    sample_data = pd.concat([sample_data, sample], axis = 1)
-
-
-
-if smooth:
-
-    sample_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_data, window_length=window_size,
-                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample_data.index, columns = sample_data.columns)
-
-    sample_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_d1, window_length=window_size,
-                                                                 polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample_data.index, columns = sample_data.columns)
 else:
-    sample_d1 = pd.DataFrame(np.gradient(sample_data, edge_order=2)[0], index = sample_data.index, columns = sample_data.columns)
-    sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = sample_data.index, columns = sample_data.columns)
 
-if data_model == "Intensity":
-    sample_data = sample_data
-elif data_model == "First derivative":
-    sample_data = sample_d1
-elif data_model == "Second derivative":
-    sample_data = sample_d2
+    sample_data = pd.DataFrame()
 
-#st.write(pd.DataFrame(sample_data.iloc[:,0]).transpose())
+    for sample_file in sample_files:
 
-predictions = pls.predict(pd.DataFrame(sample_data.iloc[:,:]).transpose())
-predictions = pd.DataFrame(predictions, columns = compound_names, index = sample_data.columns)
+        sample = pd.read_csv(sample_file, header = None, names = ["Wavelength", sample_file.name], index_col = "Wavelength")
+        sample = sample.loc[filter_range[0]:filter_range[1]]
+        sample_data = pd.concat([sample_data, sample], axis = 1)
 
-st.write(predictions)
+
+
+    if smooth:
+
+        sample_d1 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_data, window_length=window_size,
+                                                                     polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample_data.index, columns = sample_data.columns)
+
+        sample_d2 = pd.DataFrame(np.gradient(signal.savgol_filter(sample_d1, window_length=window_size,
+                                                                     polyorder=poly_order,axis=0), edge_order=2, axis = 0), index = sample_data.index, columns = sample_data.columns)
+    else:
+        sample_d1 = pd.DataFrame(np.gradient(sample_data, edge_order=2)[0], index = sample_data.index, columns = sample_data.columns)
+        sample_d2 = pd.DataFrame(np.gradient(sample_d1, edge_order=2)[0], index = sample_data.index, columns = sample_data.columns)
+
+    if data_model == "Intensity":
+        sample_data = sample_data
+    elif data_model == "First derivative":
+        sample_data = sample_d1
+    elif data_model == "Second derivative":
+        sample_data = sample_d2
+
+    #st.write(pd.DataFrame(sample_data.iloc[:,0]).transpose())
+
+    predictions = pls.predict(pd.DataFrame(sample_data.iloc[:,:]).transpose())
+    predictions = pd.DataFrame(predictions, columns = compound_names, index = sample_data.columns)
+
+    st.write(predictions)
