@@ -43,7 +43,7 @@ for calibration_file in calibration_files:
 
 
 #calibration = calibration.set_index(pd.Index(indexes))
-st.write(calibration)
+
 
 #calibration_concentrations = pd.concat( [pd.DataFrame(calibration_names, columns = ["File name"]),
 #                                         pd.DataFrame(columns = compound_names, index = range(len(calibration.columns)))], ignore_index = True)
