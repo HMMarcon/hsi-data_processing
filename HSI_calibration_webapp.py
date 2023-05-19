@@ -29,17 +29,34 @@ for compound in range(compounds):
 # Load calibration data (df_calib) and sample data (df_sample)
 # Tell the user how data should be formatted (header = wavelength followed by concentrations)
 calibration_files = st.file_uploader("Upload calibration data", type = "csv", accept_multiple_files = True)
+
+calibration_names = []
 calibration = pd.DataFrame()
 
 for calibration_file in calibration_files:
-    calibration_sample = pd.read_csv(calibration_file)
-    calibration_sample = calibration_sample.set_index(calibration_sample.columns[0])
+    calibration_sample = pd.read_csv(calibration_file, header = None, names = ["Wavelength", calibration_file.name], index_col = "Wavelength")
+
     calibration_sample = calibration_sample.dropna()
-    calibration = pd.concat([calibration, calibration_sample], axis = 1)
+    #calibration_sample.columns = ["Wavelength", calibration_file.name]
+    calibration_names.append(calibration_file.name)
+    calibration = pd.concat([calibration, calibration_sample[calibration_file.name]], axis = 1)
 
-#st.write(full_calibration.head())
 
-calibration_concentrations = pd.DataFrame(columns = ["File name"] + compound_names, index = range(len(calibration.columns)))
+#calibration = calibration.set_index(pd.Index(indexes))
+st.write(calibration)
+
+#calibration_concentrations = pd.concat( [pd.DataFrame(calibration_names, columns = ["File name"]),
+#                                         pd.DataFrame(columns = compound_names, index = range(len(calibration.columns)))], ignore_index = True)
+
+calibration_concentrations = pd.DataFrame(columns = compound_names, index = range(len(calibration.columns)))
+column_names = calibration_concentrations.columns.tolist()
+column_names.insert(0, "File name")
+calibration_concentrations = calibration_concentrations.reindex(columns = column_names)
+calibration_concentrations["File name"] = calibration_names
+
+
+
+#calibration_concentrations.Index.astype(np.int32)
 
 
 calibration_concentrations = st.experimental_data_editor(calibration_concentrations)
@@ -51,11 +68,6 @@ calibration.columns = calibration_concentrations["File name"]
 
 calibration_concentrations = calibration_concentrations.set_index("File name")
 
-st.write(calibration_concentrations)
-
-st.write(calibration.head())
-
-
 
 
 
@@ -64,9 +76,10 @@ st.markdown("Data is frequently noisy on the edges of the spectrum. Therefore, w
 
 # Let user decide how much data to process
 # Define filter range
+step_size = calibration.index[1] - calibration.index[0]
 
 filter_range = st.slider("Select filter range", int(min(calibration.index)), int(max(calibration.index)),
-                         (int(min(calibration.index)+98), int(max(calibration.index))-198), step = 1)
+                         (int(min(calibration.index)), int(max(calibration.index))), step = 4)
 
 
 
@@ -137,7 +150,6 @@ components = st.radio("Select number of components", range(1, len(data.columns))
 
 # Plot PLS diagnostics: scores
 
-st.write(type(data.transpose().reset_index(drop=True)))
 
 
 pls = PLSRegression(n_components=components)
@@ -169,13 +181,11 @@ sample_data = pd.DataFrame()
 
 for sample_file in sample_files:
 
-    sample = pd.read_csv(sample_file)
-    index = sample.columns[0]
-    sample = sample.set_index(index)
-    sample = sample.dropna()
-
+    sample = pd.read_csv(sample_file, header = None, names = ["Wavelength", sample_file.name], index_col = "Wavelength")
     sample = sample.loc[filter_range[0]:filter_range[1]]
     sample_data = pd.concat([sample_data, sample], axis = 1)
+
+
 
 if smooth:
 
@@ -195,8 +205,9 @@ elif data_model == "First derivative":
 elif data_model == "Second derivative":
     sample_data = sample_d2
 
-st.write(pd.DataFrame(sample_data.iloc[:,0]).transpose())
+#st.write(pd.DataFrame(sample_data.iloc[:,0]).transpose())
 
 predictions = pls.predict(pd.DataFrame(sample_data.iloc[:,:]).transpose())
+predictions = pd.DataFrame(predictions, columns = compound_names, index = sample_data.columns)
 
 st.write(predictions)
