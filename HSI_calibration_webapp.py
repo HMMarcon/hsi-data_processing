@@ -10,6 +10,11 @@ import scipy.signal as signal
 from sklearn.decomposition import PCA
 from sklearn.model_selection import LeaveOneOut
 from sklearn.metrics import r2_score as R2
+from sklearn.metrics import mean_squared_error as MSE
+from sklearn.metrics import mean_absolute_error as MAE
+from sklearn.metrics import explained_variance_score as EVS
+from sklearn.metrics import max_error as ME
+
 
 # Give page description and short tutorial
 st.markdown("# Hyperspectral calibration setup")
@@ -23,7 +28,7 @@ st.markdown("Upload calibration data and sample data. "
             "wavelengths and the remaining columns containing the samples (either calibration of unknown samples). "
             "It is important to remember that the CSV-file should have a header with the names of the samples. ")
 
-compounds = st.number_input("Enter number of compounds for calibration:", step = 1)
+compounds = st.number_input("Enter number2 of compounds for calibration:", step = 1)
 compound_names = []
 for compound in range(compounds):
     compound_names.append(st.text_input(f"Enter compound {compound} name:"))
@@ -69,12 +74,32 @@ st.markdown("Data is frequently noisy on the edges of the spectrum. Therefore, w
 # Define filter range
 step_size = calibration.index[1] - calibration.index[0]
 
-filter_range = st.slider("Select filter range", int(min(calibration.index)), int(max(calibration.index)),
-                         (int(min(calibration.index)), int(max(calibration.index))), step = 4)
+variable_selection = st.number_input("Select number of wavelength ranges of interest (Variable selection):", step = 1)
+
+filter_range = []
+
+for variable in range(variable_selection):
+    filter_range.append(st.slider(f"Select filter range {variable}", int(min(calibration.index)), int(max(calibration.index)),
+                         (int(min(calibration.index)), int(max(calibration.index))), step = step_size))
+
+#filter_range = st.slider("Select filter range", int(min(calibration.index)), int(max(calibration.index)),
+#                         (int(min(calibration.index)), int(max(calibration.index))), step = 4)
 
 
 
-calibration = calibration.loc[filter_range[0]:filter_range[1]]
+full_calibration = calibration.copy()
+
+#calibration = calibration.loc[filter_range[0][0]:filter_range[0][1]]
+
+mask = pd.Series(False, index=calibration.index, dtype=bool)
+for start, end in filter_range:
+    mask = mask | calibration.index.isin(range(start, end+1))
+
+calibration = calibration[mask]
+
+
+fig = px.line(calibration, x = calibration.index, y = calibration.columns[:], title = "Raw data")
+st.plotly_chart(fig)
 
 # User decide Sav-Gol filter parameters
 st.markdown("## 3. Savitzky-Golay Filter")
@@ -117,9 +142,18 @@ st.plotly_chart(fig)
 # User decide PLS parameters
 # Select number of components
 st.markdown("## 4. Partial Least Squares Regression parameters")
-st.markdown("Explanation of what each parameter does")
 
-data_model = st.radio("Select with what do you want to make the analysis", ["Intensity", "First derivative", "Second derivative"])
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("Decide which data format do you want to analyse. Each format has its own advantages and disadvantages. "
+                "The derivatives are recommended because they mitigate any shifts in baseline.")
+    data_model = st.radio("Select with what do you want to make the analysis", ["Intensity", "First derivative", "Second derivative"])
+
+with col2:
+    st.markdown("When running a PCA you can use a lot more components than needed. "
+                "This is a filter to avoid running PCA without physical meaning. If unsure, leave at zero. ")
+    threshold = st.slider("Select the threshold for the minimum variance explained by the PCA.",
+                          0.0, 0.2, 0.001, step = 0.0001, format = "%.4f")
 
 if data_model == "Intensity":
     data = calibration
@@ -128,15 +162,28 @@ elif data_model == "First derivative":
 elif data_model == "Second derivative":
     data = calibration_d2
 
-pca = PCA(n_components=len(data.columns))
-pca.fit(data.transpose())
-pca_results = pd.DataFrame(pca.explained_variance_ratio_, columns = ["Variance explained"], index = range(1, len(data.columns)+1))
+
+
+try:
+    for i in range(1, len(data.columns)):
+        pca = PCA(n_components=i)
+        pca.fit(data.transpose())
+        if pca.explained_variance_ratio_[-1] < threshold:
+            break
+
+    pca_results = pd.DataFrame(pca.explained_variance_ratio_,
+                               columns = ["Variance explained"], index = range(1, len(pca.explained_variance_ratio_)+1))
+except:
+    pca = PCA(n_components=len(calibration.index))
+    pca.fit(data.transpose())
+    pca_results = pd.DataFrame(pca.explained_variance_ratio_,
+                               columns = ["Variance explained"], index = range(1, len(pca.explained_variance_ratio_)+1))
 
 
 fig = px.line(pca_results, title = "PCA explained variance ratio")
 st.plotly_chart(fig)
 
-components = st.radio("Select number of components", range(1, len(data.columns)))
+components = st.radio("Select number of components", range(1, len(pca_results)))
 
 
 # Plot PLS diagnostics: scores
@@ -159,12 +206,29 @@ for i, (train_index, test_index) in enumerate (loo.split(full_data.T)):
     results = pd.concat([results, pd.DataFrame(result, columns = compound_names)])
 
 r2 = R2(true_values, results)
-st.markdown(f"Overall R^2 value: {r2}")
-for i in range(len(compound_names)):
-    st.markdown(f"R^2 value for {compound_names[i]}: {R2(true_values.iloc[:,i], results.iloc[:,i])}")
-    #st.image(plt.plot(list(true_values.iloc[:,i]), list(results.iloc[:,i])))
-#st.write(true_values, results)
-#plt.plot(true_values, results, 'o')
+exp_var_score = EVS(true_values, results)
+mse = MSE(true_values, results)
+mae = MAE(true_values, results)
+
+
+
+
+
+st.markdown("## 5. Results")
+st.markdown("All metrics calculated using a Leave-One-Out Cross-validation")
+
+results_df = pd.DataFrame(index = ["Global"] + compound_names)
+metrics = {"R^2": R2, "Explained variance score": EVS,
+           "Mean squared error": MSE, "Mean absolute error": MAE}
+
+for metric in metrics.keys():
+    score = []
+    score.append(metrics[metric](true_values, results))
+    for i in range(len(compound_names)):
+        score.append(metrics[metric](true_values.iloc[:,i], results.iloc[:,i]))
+    results_df[metric] = score
+
+st.write(results_df)
 
 
 #Regression with all data
@@ -201,10 +265,8 @@ else:
     for sample_file in sample_files:
 
         sample = pd.read_csv(sample_file, header = None, names = ["Wavelength", sample_file.name], index_col = "Wavelength")
-        sample = sample.loc[filter_range[0]:filter_range[1]]
+        sample = sample[mask]
         sample_data = pd.concat([sample_data, sample], axis = 1)
-
-
 
     if smooth:
 
@@ -230,3 +292,4 @@ else:
     predictions = pd.DataFrame(predictions, columns = compound_names, index = sample_data.columns)
 
     st.write(predictions)
+
