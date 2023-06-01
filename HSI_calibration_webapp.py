@@ -257,8 +257,10 @@ for compound in compound_names:
 fig = px.scatter(true_vs_pred, x = "True values", y = "Predicted values", color = "Compound")
 fig.add_shape(
     type='line', line=dict(color = "white", width=2, dash="dash"),
-    x0=min(true_vs_pred["True values"]), x1=max(true_vs_pred["True values"]),
-    y0=min(true_vs_pred["Predicted values"]), y1=max(true_vs_pred["Predicted values"])
+    x0=min(min(true_vs_pred["True values"]), min(true_vs_pred["Predicted values"])),
+    x1=max(max(true_vs_pred["True values"]), max(true_vs_pred["Predicted values"])),
+    y0=min(min(true_vs_pred["True values"]), min(true_vs_pred["Predicted values"])),
+    y1=max(max(true_vs_pred["True values"]), max(true_vs_pred["Predicted values"]))
 )
 st.plotly_chart(fig)
 
