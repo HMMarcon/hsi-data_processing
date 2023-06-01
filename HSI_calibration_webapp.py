@@ -18,7 +18,6 @@ from sklearn.metrics import max_error as ME
 
 # Give page description and short tutorial
 st.markdown("# Hyperspectral calibration setup")
-
 st.markdown("## Introduction")
 st.markdown("This app is designed as a walkthrough to calibrate hyperspectral image data. Here is a general schema of the data processing steps:")
 # st.image("https://i.imgur.com/1Z0ZQ2M.png", width = 500) - add image later
@@ -28,43 +27,54 @@ st.markdown("Upload calibration data and sample data. "
             "wavelengths and the remaining columns containing the samples (either calibration of unknown samples). "
             "It is important to remember that the CSV-file should have a header with the names of the samples. ")
 
-compounds = st.number_input("Enter number2 of compounds for calibration:", step = 1)
-compound_names = []
-for compound in range(compounds):
-    compound_names.append(st.text_input(f"Enter compound {compound} name:"))
 
 # Load calibration data (df_calib) and sample data (df_sample)
 # Tell the user how data should be formatted (header = wavelength followed by concentrations)
-calibration_files = st.file_uploader("Upload calibration data", type = "csv", accept_multiple_files = True)
-
+input_format = st.radio("Select data format", ("Single file", "Multiple files"))
 calibration_names = []
 calibration = pd.DataFrame()
 
-for calibration_file in calibration_files:
-    calibration_sample = pd.read_csv(calibration_file, header = None, names = ["Wavelength", calibration_file.name], index_col = "Wavelength")
+if input_format == "Multiple files":
+    compounds = st.number_input("Enter number of compounds for calibration:", step=1)
+    compound_names = []
+    for compound in range(compounds):
+        compound_names.append(st.text_input(f"Enter compound {compound} name:"))
 
-    calibration_sample = calibration_sample.dropna()
-    calibration_names.append(calibration_file.name)
-    calibration = pd.concat([calibration, calibration_sample[calibration_file.name]], axis = 1)
+    calibration_files = st.file_uploader("Upload calibration data", type = "csv", accept_multiple_files = True)
+    for calibration_file in calibration_files:
+        calibration_sample = pd.read_csv(calibration_file, header=None, names=["Wavelength", calibration_file.name],
+                                         index_col="Wavelength")
 
-calibration_concentrations = pd.DataFrame(columns = compound_names, index = range(len(calibration.columns)))
-column_names = calibration_concentrations.columns.tolist()
-column_names.insert(0, "File name")
-calibration_concentrations = calibration_concentrations.reindex(columns = column_names)
-calibration_concentrations["File name"] = calibration_names
+        calibration_sample = calibration_sample.dropna()
+        calibration_names.append(calibration_file.name)
+        calibration = pd.concat([calibration, calibration_sample[calibration_file.name]], axis=1)
 
+    calibration_concentrations = pd.DataFrame(columns=compound_names, index=range(len(calibration.columns)))
+    column_names = calibration_concentrations.columns.tolist()
+    column_names.insert(0, "File name")
+    calibration_concentrations = calibration_concentrations.reindex(columns=column_names)
+    calibration_concentrations["File name"] = calibration_names
 
+    calibration_concentrations = st.experimental_data_editor(calibration_concentrations)
+    calibration.columns = calibration_concentrations["File name"]
+    calibration_concentrations = calibration_concentrations.set_index("File name")
 
-calibration_concentrations = st.experimental_data_editor(calibration_concentrations)
+elif input_format == "Single file":
+    calibration_file = st.file_uploader("Upload calibration data", type = "csv")
+    if calibration_file == None:
+        st.stop()
 
-
-calibration.columns = calibration_concentrations["File name"]
-
-
-
-calibration_concentrations = calibration_concentrations.set_index("File name")
-
-
+    calibration_file = pd.read_csv(calibration_file, index_col = 0)
+    calibration = calibration_file
+    st.write(calibration)
+    calibration_conc = st.file_uploader("Upload calibration concentrations", type = "csv")
+    if calibration_conc == None:
+        st.stop()
+    calibration_conc = pd.read_csv(calibration_conc, index_col = 0)
+    calibration_conc = calibration_conc.reset_index(drop= True)
+    compound_names = calibration_conc.columns.tolist()
+    calibration_concentrations = calibration_conc
+    st.write(calibration_conc)
 
 
 st.markdown("## 2. Filter data")
@@ -72,9 +82,10 @@ st.markdown("Data is frequently noisy on the edges of the spectrum. Therefore, w
 
 # Let user decide how much data to process
 # Define filter range
-step_size = calibration.index[1] - calibration.index[0]
+step_size = int(calibration.index[1] - calibration.index[0])
 
-variable_selection = st.number_input("Select number of wavelength ranges of interest (Variable selection):", step = 1)
+variable_selection = st.number_input("Select number of wavelength ranges of interest (Variable selection):",
+                                     value = 1, step = 1)
 
 filter_range = []
 
@@ -147,7 +158,8 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("Decide which data format do you want to analyse. Each format has its own advantages and disadvantages. "
                 "The derivatives are recommended because they mitigate any shifts in baseline.")
-    data_model = st.radio("Select with what do you want to make the analysis", ["Intensity", "First derivative", "Second derivative"])
+    data_model = st.radio("Select with what do you want to make the analysis",
+                          ["Intensity", "First derivative", "Second derivative"], index = 1)
 
 with col2:
     st.markdown("When running a PCA you can use a lot more components than needed. "
@@ -183,7 +195,7 @@ except:
 fig = px.line(pca_results, title = "PCA explained variance ratio")
 st.plotly_chart(fig)
 
-components = st.radio("Select number of components", range(1, len(pca_results)))
+components = st.radio("Select number of components", range(1, len(pca_results)), index = 0)
 
 
 # Plot PLS diagnostics: scores
@@ -204,6 +216,8 @@ for i, (train_index, test_index) in enumerate (loo.split(full_data.T)):
     true_value = calibration_concentrations.iloc[test_index].reset_index(drop=True)
     true_values = pd.concat([true_values, true_value], axis = 0)
     results = pd.concat([results, pd.DataFrame(result, columns = compound_names)])
+
+
 
 r2 = R2(true_values, results)
 exp_var_score = EVS(true_values, results)
@@ -230,24 +244,30 @@ for metric in metrics.keys():
 
 st.write(results_df)
 
+true_vs_pred = pd.DataFrame(columns = ["True values", "Predicted values", "Compound"])
+for compound in compound_names:
+
+    entry_tvpred = pd.DataFrame({"True values": list(true_values[compound]),
+                                 "Predicted values": list(results[compound]),
+                                 "Compound" :[compound]*len(true_values[compound])})
+    true_vs_pred = pd.concat([true_vs_pred, entry_tvpred], axis = 0)
+
+
+## Predicted vs Actual plot
+fig = px.scatter(true_vs_pred, x = "True values", y = "Predicted values", color = "Compound")
+fig.add_shape(
+    type='line', line=dict(color = "white", width=2, dash="dash"),
+    x0=min(true_vs_pred["True values"]), x1=max(true_vs_pred["True values"]),
+    y0=min(true_vs_pred["Predicted values"]), y1=max(true_vs_pred["Predicted values"])
+)
+st.plotly_chart(fig)
+
 
 #Regression with all data
 
 pls = PLSRegression(n_components=components)
 pls.fit(data.transpose().reset_index(drop=True),calibration_concentrations.reset_index(drop=True))
 
-# Add Predicted vs Observed plot
-#
-# fig = go.Figure()
-#
-# fig.add_trace(go.Scatter(x = [min(calibration_concentrations), max(calibration_concentrations)],
-#               y = [min(calibration_concentrations), max(calibration_concentrations)]))
-#
-# fig.add_trace(go.Scatter(x = pls.predict(data.transpose()), y = calibration_concentrations))
-#
-#
-# fig = px.scatter(x = pls.predict(data.transpose()), y = calibration_concentrations, title = "PLS scores")
-# st.plotly_chart(fig)
 
 
 # Generate predictions with sample data
@@ -267,6 +287,10 @@ else:
         sample = pd.read_csv(sample_file, header = None, names = ["Wavelength", sample_file.name], index_col = "Wavelength")
         sample = sample[mask]
         sample_data = pd.concat([sample_data, sample], axis = 1)
+
+
+
+
 
     if smooth:
 
@@ -292,4 +316,7 @@ else:
     predictions = pd.DataFrame(predictions, columns = compound_names, index = sample_data.columns)
 
     st.write(predictions)
+
+    st.download_button("Download predictions", data = predictions.to_csv(), file_name = "predictions_.csv")
+
 
