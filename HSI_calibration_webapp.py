@@ -35,12 +35,18 @@ calibration_names = []
 calibration = pd.DataFrame()
 
 if input_format == "Multiple files":
+
     compounds = st.number_input("Enter number of compounds for calibration:", step=1)
     compound_names = []
     for compound in range(compounds):
         compound_names.append(st.text_input(f"Enter compound {compound} name:"))
 
+
+
     calibration_files = st.file_uploader("Upload calibration data", type = "csv", accept_multiple_files = True)
+    if calibration_files == None:
+        st.stop()
+        
     for calibration_file in calibration_files:
         calibration_sample = pd.read_csv(calibration_file, header=None, names=["Wavelength", calibration_file.name],
                                          index_col="Wavelength")
@@ -55,7 +61,19 @@ if input_format == "Multiple files":
     calibration_concentrations = calibration_concentrations.reindex(columns=column_names)
     calibration_concentrations["File name"] = calibration_names
 
-    calibration_concentrations = st.experimental_data_editor(calibration_concentrations)
+    ##Learn how to use data editor and have inputs as floats
+    column_dict = {}
+    for compound_name in column_names:
+        column_dict[compound_name] = {compound_name: st.column_config.NumberColumn(
+            compound_name,
+            min_value=0, format="%.3f",
+        )}
+
+
+
+    calibration_concentrations = st.data_editor(calibration_concentrations)
+
+    st.write(calibration_concentrations)
     calibration.columns = calibration_concentrations["File name"]
     calibration_concentrations = calibration_concentrations.set_index("File name")
 
@@ -254,14 +272,22 @@ for compound in compound_names:
 
 
 ## Predicted vs Actual plot
+#st.write(type(true_vs_pred["True values"].iloc[0]))
 fig = px.scatter(true_vs_pred, x = "True values", y = "Predicted values", color = "Compound")
-fig.add_shape(
-    type='line', line=dict(color = "white", width=2, dash="dash"),
-    x0=min(min(true_vs_pred["True values"]), min(true_vs_pred["Predicted values"])),
-    x1=max(max(true_vs_pred["True values"]), max(true_vs_pred["Predicted values"])),
-    y0=min(min(true_vs_pred["True values"]), min(true_vs_pred["Predicted values"])),
-    y1=max(max(true_vs_pred["True values"]), max(true_vs_pred["Predicted values"]))
-)
+try:
+    for i in range(len(true_vs_pred["True values"])):
+        true_vs_pred["True values"].iloc[i] = float(true_vs_pred["True values"].iloc[i])
+        true_vs_pred["Predicted values"].iloc[i] = float(true_vs_pred["Predicted values"].iloc[i])
+
+    fig.add_shape(
+        type='line', line=dict(color = "white", width=2, dash="dash"),
+        x0=min(min(true_vs_pred["True values"]), min(true_vs_pred["Predicted values"])),
+        x1=max(max(true_vs_pred["True values"]), max(true_vs_pred["Predicted values"])),
+        y0=min(min(true_vs_pred["True values"]), min(true_vs_pred["Predicted values"])),
+        y1=max(max(true_vs_pred["True values"]), max(true_vs_pred["Predicted values"]))
+    )
+except:
+    pass
 st.plotly_chart(fig)
 
 
@@ -320,5 +346,6 @@ else:
     st.write(predictions)
 
     st.download_button("Download predictions", data = predictions.to_csv(), file_name = "predictions_.csv")
+
 
 
