@@ -67,8 +67,7 @@ if input_format == "Multiple files":
         calibration_sample = pd.read_csv(calibration_file, header=None, names=["Wavelength", calibration_file.name],
                                          # Remove any missing data (rows with NaNs)
                                          calibration_sample=calibration_sample.dropna()
-        # Add the name of each file to a list
-        calibration_names.append(calibration_file.name)
+
         # Concatenate the data from each file into a single DataFrame
         calibration = pd.concat([calibration, calibration_sample[calibration_file.name]], axis=1)
 
