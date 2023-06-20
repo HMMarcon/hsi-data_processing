@@ -65,8 +65,9 @@ if input_format == "Multiple files":
     for calibration_file in calibration_files:
         # Load each file into a DataFrame with specific column names
         calibration_sample = pd.read_csv(calibration_file, header=None, names=["Wavelength", calibration_file.name],
-                                         # Remove any missing data (rows with NaNs)
-                                         calibration_sample=calibration_sample.dropna()
+                                         index_col = "Wavelength")
+        # Remove any missing data (rows with NaNs) 
+        calibration_sample=calibration_sample.dropna()
 
         # Concatenate the data from each file into a single DataFrame
         calibration = pd.concat([calibration, calibration_sample[calibration_file.name]], axis=1)
@@ -99,7 +100,11 @@ if input_format == "Multiple files":
         calibration.columns = calibration_concentrations["File name"]
         # Set the index of the concentrations DataFrame to the 'File name' column
         calibration_concentrations = calibration_concentrations.set_index("File name")
-
+    
+    calibration_concentrations = st.data_editor(calibration_concentrations)
+    st.write(calibration_concentrations)
+    calibration.columns = calibration_concentrations["File name"]
+    calibration_concentrations = calibration_concentrations.set_index("File name")
 # Code for single file upload option
 elif input_format == "Single file":
     # Upload a single CSV file for calibration data
@@ -115,6 +120,7 @@ elif input_format == "Single file":
     # Display the loaded calibration data
     st.write(calibration)
     # Upload a single CSV file for calibration concentrations    calibration_conc = st.file_uploader("Upload calibration concentrations", type = "csv")
+    calibration_conc = st.file_uploader("Upload calibration concentrations", type = "csv")
     if calibration_conc == None:
         st.stop()
     calibration_conc = pd.read_csv(calibration_conc, index_col = 0)
